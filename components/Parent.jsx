@@ -13,13 +13,27 @@ export default function Parent({ session, onLogout }) {
     const [tod, setTod] = useState("morning");
     const [tab, setTab] = useState("tasks");
     const [loading, setLoading] = useState(true);
+    const [history, setHistory] = useState([]);
 
     const load = useCallback(async () => {
         const [t, c] = await Promise.all([
             store.getTasks(session.familyId),
             store.getCompletions(session.familyId, todayStr()),
         ]);
-        setTasks(t); setCompletions(c); setLoading(false);
+
+        // 過去7日間の実績を取得（今日は除く）
+        const histVars = [];
+        for (let i = 1; i <= 7; i++) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            histVars.push(d.toISOString().split("T")[0]);
+        }
+        const histData = await Promise.all(histVars.map(async d => {
+            const comps = await store.getCompletions(session.familyId, d);
+            return { date: d, count: comps.length };
+        }));
+
+        setTasks(t); setCompletions(c); setHistory(histData); setLoading(false);
     }, [session.familyId]);
 
     useEffect(() => { load(); }, [load]);
@@ -78,8 +92,8 @@ export default function Parent({ session, onLogout }) {
             </div>
 
             {/* タブ切り替え */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                {[["tasks", "⚔️ タスクかんり"], ["progress", "📊 しんちょく"]].map(([v, l]) => (
+            <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+                {[["tasks", "⚔️ かんり"], ["progress", "📊 きょう"], ["history", "📜 かこ"]].map(([v, l]) => (
                     <button key={v} onClick={() => setTab(v)} style={{
                         flex: 1, padding: "12px 0",
                         border: `2px solid ${tab === v ? DQ.gold : "#334466"}`,
@@ -214,6 +228,29 @@ export default function Parent({ session, onLogout }) {
                         🔄 きょうの きろくを リセット
                     </button>
                 </>
+            )}
+
+            {/* 過去の記録タブ */}
+            {tab === "history" && (
+                <Section>
+                    <STitle>📜 さいきんの ぼうけん</STitle>
+                    {history.map((h) => (
+                        <div key={h.date} style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            padding: "14px 16px", borderRadius: 8,
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid #334466",
+                            marginBottom: 8,
+                        }}>
+                            <span style={{ fontSize: 14, color: DQ.gold, fontFamily: "'DotGothic16', monospace" }}>
+                                {h.date}
+                            </span>
+                            <span style={{ fontSize: 15, fontWeight: 700, color: h.count > 0 ? DQ.success : DQ.dim }}>
+                                {h.count > 0 ? "🎊 " + h.count + "コ たおした" : "おやすみ"}
+                            </span>
+                        </div>
+                    ))}
+                </Section>
             )}
         </div>
     );
